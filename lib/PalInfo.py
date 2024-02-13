@@ -1,0 +1,466 @@
+import json
+
+from enum import Enum
+from lib.EmptyObjectHandler import *
+
+
+xpthresholds = [
+    0,
+    25,
+    56,
+    93,
+    138,
+    207,
+    306,
+    440,
+    616,
+    843,
+    1131,
+    1492,
+    1941,
+    2495,
+    3175,
+    4007,
+    5021,
+    6253,
+    7747,
+    9555,
+    11740,
+    14378,
+    17559,
+    21392,
+    26007,
+    31561,
+    38241,
+    46272,
+    55925,
+    67524,
+    81458,
+    98195,
+    118294,
+    142429,
+    171406,
+    206194,
+    247955,
+    298134,
+    358305,
+    430525,
+    517205,
+    621236,
+    746089,
+    895928,
+    1075751,
+    1291554,
+    1550533,
+    1861323,
+    2234286,
+    2681857
+]
+if len(xpthresholds) < 50:
+    print("Something is wrong with the thresholds")
+
+
+class PalGender(Enum):
+    MALE = "#02A3FE"
+    FEMALE = "#EC49A6"
+    UNKNOWN = "darkgrey"
+
+
+class PalObject:
+    def __init__(self, name, primary, secondary="None", human=False, tower=False):
+        self._name = name
+        self._img = None
+        self._primary = primary
+        self._secondary = secondary
+        self._human = human
+        self._tower = tower
+
+    def GetName(self):
+        return self._name
+
+    def IsTower(self):
+        return self._tower
+
+    def GetPrimary(self):
+        return self._primary
+
+    def GetSecondary(self):
+        return self._secondary
+
+
+class PalEntity:
+
+    def __init__(self, data):
+        self._data = data
+        self._obj = data['value']['RawData']['value']['object']['SaveParameter']['value']
+
+        self.owner = ""
+        if "OwnerPlayerUId" in self._obj:
+            self.owner = self._obj["OwnerPlayerUId"]['value']
+
+        if "IsPlayer" in self._obj:
+            raise Exception("This is a player character")
+
+        if not "IsRarePal" in self._obj:
+            self._obj["IsRarePal"] = EmptyRarePalObject.copy()
+        self.isLucky = self._obj["IsRarePal"]['value']
+
+        typename = self._obj['CharacterID']['value']
+        # print(f"Debug: typename1 - {typename}")
+
+        self.isBoss = False
+        if typename[:5].lower() == "boss_":
+            # if first 5 characters match boss_ then cut the first 5 characters off
+            typename = typename[5:]
+            # typename = typename.replace("BOSS_", "") # this causes bugs
+            self.isBoss = True if not self.isLucky else False
+            if typename == "LazyCatFish":  # BOSS_LazyCatFish and LazyCatfish
+                typename = "LazyCatfish"
+
+        # print(f"Debug: typename2 - '{typename}'")
+        if typename.lower() == "sheepball":
+            typename = "Sheepball"
+
+            # Strangely, Boss and Lucky Lamballs have camelcasing
+            # Regular ones... don't
+        # print(f"Debug: typename3 - '{typename}'")
+
+        self._type = PalSpecies[typename]
+        print(
+            f"Created Entity of type {typename}: {self._type} - Lucky: {self.isLucky} Boss: {self.isBoss}")
+
+        if "Gender" in self._obj:
+            if self._obj['Gender']['value']['value'] == "EPalGenderType::Male":
+                self._gender = "Male ♂"
+            else:
+                self._gender = "Female ♀"
+        else:
+            self._gender = "Unknown"
+
+        self._workspeed = self._obj['CraftSpeed']['value']
+
+        if not "Talent_HP" in self._obj:
+            self._obj['Talent_HP'] = EmptyMeleeObject.copy()
+            # we set 0, so if its not changed it should be removed by the game again.
+            self._talent_hp = 0
+        self._talent_hp = self._obj['Talent_HP']['value']
+
+        if not "Talent_Melee" in self._obj:
+            self._obj['Talent_Melee'] = EmptyMeleeObject.copy()
+        self._melee = self._obj['Talent_Melee']['value']
+
+        if not "Talent_Shot" in self._obj:
+            self._obj['Talent_Shot'] = EmptyShotObject.copy()
+        self._ranged = self._obj['Talent_Shot']['value']
+
+        if not "Talent_Defense" in self._obj:
+            self._obj['Talent_Defense'] = EmptyDefenceObject.copy()
+        self._defence = self._obj['Talent_Defense']['value']
+
+        if not "Rank" in self._obj:
+            self._obj['Rank'] = EmptyRankObject.copy()
+        self._rank = self._obj['Rank']['value']
+
+        # Fix broken ranks
+        if self.GetRank() < 1 or self.GetRank() > 5:
+            self.SetRank(1)
+
+        if not "PassiveSkillList" in self._obj:
+            self._obj['PassiveSkillList'] = EmptySkillObject.copy()
+        self._skills = self._obj['PassiveSkillList']['value']['values']
+        self.CleanseSkills()
+
+        if not "Level" in self._obj:
+            self._obj['Level'] = EmptyLevelObject.copy()
+        self._level = self._obj['Level']['value']
+
+        if not "Exp" in self._obj:
+            self._obj['Exp'] = EmptyExpObject.copy()
+        # We don't store Exp yet
+
+        self._nickname = ""
+        if "NickName" in self._obj:
+            self._nickname = self._obj['NickName']['value']
+
+        self.isTower = self._type.IsTower()
+
+        self._storedLocation = self._obj['SlotID']
+        self.storageId = self._storedLocation["value"]["ContainerId"]["value"]["ID"]["value"]
+        self.storageSlot = self._storedLocation["value"]["SlotIndex"]["value"]
+
+        if not "MasteredWaza" in self._obj:
+            self._obj["MasteredWaza"] = EmptyMovesObject.copy()
+
+        for i in self._obj["MasteredWaza"]["value"]["values"]:
+            if not matches(typename, i) or PalAttacks[i] in PalLearnSet[self._type.GetName()]:
+                self._obj["MasteredWaza"]["value"]["values"].remove(i)
+        for i in self._obj["EquipWaza"]["value"]["values"]:
+            if not matches(typename, i):
+                self._obj["EquipWaza"]["value"]["values"].remove(i)
+
+        self._learntMoves = self._obj["MasteredWaza"]["value"]["values"]
+        self._equipMoves = self._obj["EquipWaza"]["value"]["values"]
+        self._learntBackup = self._learntMoves[:]
+
+    def SwapGender(self):
+        if self._obj['Gender']['value']['value'] == "EPalGenderType::Male":
+            self._obj['Gender']['value']['value'] = "EPalGenderType::Female"
+            self._gender = "Female ♀"
+        else:
+            self._obj['Gender']['value']['value'] = "EPalGenderType::Male"
+            self._gender = "Male ♂"
+
+    def CleanseSkills(self):
+        i = 0
+        while i < len(self._skills):
+            if self._skills[i].lower() == "none":
+                self._skills.pop(i)
+            else:
+                i += 1
+
+    def GetType(self):
+        return self._type
+
+    def SetType(self, value):
+        f = find(value)
+        self._obj['CharacterID']['value'] = (
+            "BOSS_" if (self.isBoss or self.isLucky) else "") + f
+        self._type = PalSpecies[f]
+        self.SetLevelMoves()
+
+    def GetObject(self):
+        return self._type
+
+    def GetGender(self):
+        return self._gender
+
+    def GetWorkSpeed(self):
+        return self._workspeed
+
+    def SetWorkSpeed(self, value):
+        self._obj['CraftSpeed']['value'] = self._workspeed = value
+
+    def SetAttack(self, mval, rval):
+        self._obj['Talent_Melee']['value'] = self._melee = mval
+        self._obj['Talent_Shot']['value'] = self._ranged = rval
+
+    def GetTalentHP(self):
+        return self._talent_hp
+
+    def SetTalentHP(self, value):
+        self._obj['Talent_HP']['value'] = self._talent_hp = value
+
+    def GetAttackMelee(self):
+        return self._melee
+
+    def SetAttackMelee(self, value):
+        self._obj['Talent_Melee']['value'] = self._melee = value
+
+    def GetAttackRanged(self):
+        return self._ranged
+
+    def SetAttackRanged(self, value):
+        self._obj['Talent_Shot']['value'] = self._ranged = value
+
+    def GetDefence(self):
+        return self._defence
+
+    def SetDefence(self, value):
+        self._obj['Talent_Defense']['value'] = self._defence = value
+
+    def GetName(self):
+        return self.GetObject().GetName()
+
+    def GetPrimary(self):
+        return self.GetObject().GetPrimary()
+
+    def GetSecondary(self):
+        return self.GetObject().GetSecondary()
+
+    def GetSkills(self):
+        self.CleanseSkills()
+        return self._skills
+    
+    def GetReadableSkills(self):
+        return [PalPassives[c] for c in self._skills]
+
+    def SkillCount(self):
+        return len(self._skills)
+
+    def SetSkill(self, slot, skill):
+        if slot > len(self._skills)-1:
+            self._skills.append(find(skill))
+        else:
+            self._skills[slot] = find(skill)
+
+    def SetAttack(self, slot, attack):
+        if slot > len(self._equipMoves)-1:
+            self._equipMoves.append(find(attack))
+        else:
+            self._equipMoves[slot] = find(attack)
+        self.SetLevelMoves()
+
+    def GetOwner(self):
+        return self.owner
+
+    def GetLevel(self):
+        return self._level
+
+    def SetLevel(self, value):
+        # We need this check until we fix adding missing nodes
+        if "Level" in self._obj and "Exp" in self._obj:
+            self._obj['Level']['value'] = self._level = value
+            self._obj['Exp']['value'] = xpthresholds[value-1]
+            self.SetLevelMoves()
+        else:
+            print(f"[ERROR:] Failed to update level for: '{self.GetName()}'")
+
+    def SetLevelMoves(self):
+        value = self._level
+        self._obj["MasteredWaza"]["value"]["values"] = self._learntMoves = self._learntBackup[:]
+        for i in PalLearnSet[self._type.GetName()]:
+            if value >= PalLearnSet[self._type.GetName()][i]:
+                if not find(i) in self._obj["MasteredWaza"]["value"]["values"]:
+                    self._obj["MasteredWaza"]["value"]["values"].append(
+                        find(i))
+            elif find(i) in self._obj["MasteredWaza"]["value"]["values"]:
+                self._obj["MasteredWaza"]["value"]["values"].remove(find(i))
+
+        for i in self._equipMoves:
+            if not matches(find(self._type.GetName()), i):
+                self._equipMoves.remove(i)
+                self._obj["EquipWaza"]["value"]["values"] = self._equipMoves
+            elif not i in self._obj["MasteredWaza"]["value"]["values"]:
+                self._obj["MasteredWaza"]["value"]["values"].append(i)
+
+        self._learntMoves = self._obj["MasteredWaza"]["value"]["values"]
+        print("------")
+        for i in self._learntMoves:
+            print(i)
+
+    def GetRank(self):
+        return self._rank
+
+    def SetRank(self, value):
+        if "Rank" in self._obj:
+            # we dont +1 here, since we have methods to patch rank in PalEdit.py
+            self._obj['Rank']['value'] = self._rank = value
+        else:
+            # we probably could get rid of this line, since you add rank if missing - same with level
+            print(f"[ERROR:] Failed to update rank for: '{self.GetName()}'")
+
+    def RemoveSkill(self, slot):
+        if slot < len(self._skills):
+            self._skills.pop(slot)
+
+    def RemoveAttack(self, slot):
+        if slot < len(self._equipMoves):
+            self._equipMoves.pop(slot)
+        self.SetLevelMoves()
+
+    def GetNickname(self):
+        return self.GetName() if self._nickname == "" else self._nickname
+
+    def SetLucky(self, v=True):
+        self._obj["IsRarePal"]['value'] = self.isLucky = v
+        self.SetType(self._type.GetName())
+        if v:
+            if self.isBoss:
+                self.isBoss = False
+
+    def SetBoss(self, v=True):
+        self.isBoss = v
+        self.SetType(self._type.GetName())
+        if v:
+            if self.isLucky:
+                self.SetLucky(False)
+
+    def GetEquippedMoves(self):
+        return self._equipMoves
+
+    def GetLearntMoves(self):
+        return self._learntMoves
+
+
+def matches(pal, move):
+    if SkillExclusivity[move] == None:
+        return True
+    elif pal in SkillExclusivity[move]:
+        return True
+    return False
+    """
+    print(pal, move)
+    if move.startswith("EPalWazaID::Unique_"):
+        o = move.split("_")
+        n = o[1]
+        if len(o) > 3:
+            t = o.pop(1)
+            v = o.pop(1)
+            n = f"{t}_{v}"
+        if not pal == n and n != "Frostallion":
+            return False
+    return True
+    """
+
+
+with open("resources/data/elements.json", "r", encoding="utf8") as elementfile:
+    PalElements = {}
+    for i in json.loads(elementfile.read())["values"]:
+        PalElements[i['Name']] = i['Color']
+
+with open("resources/data/pals.json", "r", encoding="utf8") as palfile:
+    PalSpecies = {}
+    PalLearnSet = {}
+    for i in json.loads(palfile.read())["values"]:
+        h = "Human" in i
+        t = "Tower" in i
+        p = i["Type"][0]
+        s = "None"
+        if len(i["Type"]) == 2:
+            s = i["Type"][1]
+        PalSpecies[i["CodeName"]] = PalObject(i["Name"], p, s, h, t)
+        PalLearnSet[i["Name"]] = i["Moveset"]
+
+with open("resources/data/passives.json", "r", encoding="utf8") as passivefile:
+    PalPassives = {}
+    PassiveDescriptions = {}
+    PassiveRating = {}
+    for i in json.loads(passivefile.read())["values"]:
+        PalPassives[i["CodeName"]] = i["Name"]
+        PassiveDescriptions[i["Name"]] = i["Description"]
+        PassiveRating[i["Name"]] = i["Rating"]
+    PalPassives = dict(sorted(PalPassives.items()))
+
+with open("resources/data/attacks.json", "r", encoding="utf8") as attackfile:
+    PalAttacks = {}
+    AttackPower = {}
+    AttackTypes = {}
+    SkillExclusivity = {}
+
+    l = json.loads(attackfile.read())
+
+    debugOutput = l["values"]
+
+    for i in l["values"]:
+        PalAttacks[i["CodeName"]] = i["Name"]
+        AttackPower[i["Name"]] = i["Power"]
+        AttackTypes[i["Name"]] = i["Type"]
+        if "Exclusive" in i:
+            SkillExclusivity[i["CodeName"]] = i["Exclusive"]
+        else:
+            SkillExclusivity[i["CodeName"]] = None
+
+    PalAttacks = dict(sorted(PalAttacks.items()))
+
+
+def find(name):
+    for i in PalSpecies:
+        if PalSpecies[i].GetName() == name:
+            return i
+    for i in PalPassives:
+        if PalPassives[i] == name:
+            return i
+    for i in PalAttacks:
+        if PalAttacks[i] == name:
+            return i
+    return "None"

@@ -1,0 +1,17 @@
+Box Organizer + Breeding Calcuator
+
+Lots of code copied from
+https://github.com/EternalWraith/PalEdit
+
+breeding pattern
+https://gist.github.com/drayx/064244eae8c2e7ca1d234be725a75bd4
+
+Too lazy to do license
+
+"""
+TODO LIST:
+Breeding matcher
+
+Upload csv
+File movement
+"""
