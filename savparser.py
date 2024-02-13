@@ -72,6 +72,7 @@ COMBAT_SKILLS = {
     "Lucky": 1,
     "Swift": 1,
     "Divine Dragon": 1,
+    "Spirit Emperor": 1,
 }
 
 WORK_SKILLS = {
