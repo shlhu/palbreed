@@ -75,6 +75,7 @@ COMBAT_SKILLS = {
     "Spirit Emperor": 1,
     "Lord of the Sea": 1,
     "Lord of Lightning": 4,
+    "Lord of the Underworld": 1,
 }
 
 WORK_SKILLS = {
