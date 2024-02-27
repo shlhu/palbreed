@@ -100,6 +100,13 @@ OWNERS = {
 }
 
 
+def extra_col(entity):
+    # Currently just check for dark whisp
+    if entity.GetLearntMoves().count("EPalWazaID::DarkLegion"):
+        return True
+    return False
+
+
 def convert_to_short_dict(entity):
     data = {
         "owner": OWNERS[str(entity.GetOwner())[:3]],
@@ -118,6 +125,7 @@ def convert_to_short_dict(entity):
         "ranged": entity.GetAttackRanged(),
         "def": entity.GetDefence(),
         "total_100": 0,
+        "extra_col": extra_col(entity),
         "slot": entity.storageSlot
     }
     for stat in ("hp", "ranged", "def"):
@@ -157,7 +165,7 @@ def export_csv(paldata, outfile):
         fieldnames = [
             "owner", "level", "pal", "skills", "gender", "combat_score", "not_combat_score",
             "mount_score", "not_mount_score", "work_score", "not_work_score",
-            "hp", "melee", "ranged", "def", "total_100", "slot"]
+            "hp", "melee", "ranged", "def", "total_100", "extra_col", "slot"]
         writer = DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in paldata:
