@@ -78,6 +78,7 @@ COMBAT_SKILLS = {
     "Lord of the Underworld": 1,
     "Ice Emperor": 1,
     "Flame Emperor": 1,
+    "Celestial Emperor": 1,
 }
 
 WORK_SKILLS = {
