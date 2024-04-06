@@ -1,48 +1,158 @@
 import io
+import math
 import os
 import struct
+import sys
 import uuid
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
+# Alias stdlib types to avoid name conflicts
+_float = float
+_bytes = bytes
 
-class UUID:
-    """Wrapper around uuid.UUID to delay evaluation of UUIDs until necessary"""
+try:
+    from recordclass import as_dataclass
+except ImportError:
+    pass
 
-    __slots__ = ("raw_bytes", "parsed_uuid")
-    raw_bytes: bytes
-    parsed_uuid: uuid.UUID
+if os.getenv("FORCE_STDLIB_ONLY") or "recordclass" not in sys.modules:
+    if os.getenv("DEBUG"):
+        print("Using stdlib-compatible UUID class")
 
-    def __init__(self, raw_bytes: bytes) -> None:
-        self.raw_bytes = raw_bytes
-        self.parsed_uuid = None
+    class UUID:
+        """Wrapper around uuid.UUID to delay evaluation of UUIDs until necessary"""
 
-    def from_str(s: str) -> "UUID":
-        b = uuid.UUID(s).bytes
-        return UUID(
-            bytes(
-                [
-                    b[0x3],
-                    b[0x2],
-                    b[0x1],
-                    b[0x0],
-                    b[0x7],
-                    b[0x6],
-                    b[0x5],
-                    b[0x4],
-                    b[0xB],
-                    b[0xA],
-                    b[0x9],
-                    b[0x8],
-                    b[0xF],
-                    b[0xE],
-                    b[0xD],
-                    b[0xC],
-                ]
+        __slots__ = ("raw_bytes", "parsed_uuid", "parsed_str")
+        raw_bytes: bytes
+        parsed_uuid: Optional[uuid.UUID]
+        parsed_str: Optional[str]
+
+        def __init__(self, raw_bytes: bytes) -> None:
+            self.raw_bytes = raw_bytes
+            self.parsed_uuid = None
+            self.parsed_str = None
+
+        @staticmethod
+        def from_str(s: str) -> "UUID":
+            b = uuid.UUID(s).bytes
+            return UUID(
+                bytes(
+                    [
+                        b[0x3],
+                        b[0x2],
+                        b[0x1],
+                        b[0x0],
+                        b[0x7],
+                        b[0x6],
+                        b[0x5],
+                        b[0x4],
+                        b[0xB],
+                        b[0xA],
+                        b[0x9],
+                        b[0x8],
+                        b[0xF],
+                        b[0xE],
+                        b[0xD],
+                        b[0xC],
+                    ]
+                )
             )
-        )
 
-    def __str__(self) -> str:
-        if not self.parsed_uuid:
+        def __str__(self) -> str:
+            if not self.parsed_str:
+                b = self.raw_bytes
+                self.parsed_str = "%08x-%04x-%04x-%04x-%04x%08x" % (
+                    (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | (b[0]),
+                    (b[7] << 8) | (b[6]),
+                    (b[5] << 8) | (b[4]),
+                    (b[0xB] << 8) | (b[0xA]),
+                    (b[9] << 8) | (b[8]),
+                    (b[0xF] << 24) | (b[0xE] << 16) | (b[0xD] << 8) | (b[0xC]),
+                )
+            return self.parsed_str
+
+        def UUID(self) -> uuid.UUID:
+            if not self.parsed_uuid:
+                b = self.raw_bytes
+                uuid_int = (
+                    b[0xC]
+                    + (b[0xD] << 8)
+                    + (b[0xE] << 16)
+                    + (b[0xF] << 24)
+                    + (b[0x8] << 32)
+                    + (b[0x9] << 40)
+                    + (b[0xA] << 48)
+                    + (b[0xB] << 56)
+                    + (b[0x4] << 64)
+                    + (b[0x5] << 72)
+                    + (b[0x6] << 80)
+                    + (b[0x7] << 88)
+                    + (b[0x0] << 96)
+                    + (b[0x1] << 104)
+                    + (b[0x2] << 112)
+                    + (b[0x3] << 120)
+                )
+                self.parsed_uuid = uuid.UUID(int=uuid_int)
+            return self.parsed_uuid
+
+        def __eq__(self, __value: object) -> bool:
+            if isinstance(__value, UUID):
+                return self.raw_bytes == __value.raw_bytes
+            return str(self) == str(__value)
+
+        def __repr__(self) -> str:
+            return "%s.UUID('%s')" % (self.__module__, str(self))
+
+        def __hash__(self) -> int:
+            return hash(str(self))
+
+else:
+    if os.getenv("DEBUG"):
+        print("Using recordclass-based UUID class")
+
+    @as_dataclass(hashable=True, fast_new=True)
+    class UUID:  # type: ignore[no-redef]
+        raw_bytes: bytes
+        """Wrapper around uuid.UUID to delay evaluation of UUIDs until necessary"""
+
+        @staticmethod
+        def from_str(s: str) -> "UUID":
+            b = uuid.UUID(s).bytes
+            return UUID(
+                bytes(
+                    [
+                        b[0x3],
+                        b[0x2],
+                        b[0x1],
+                        b[0x0],
+                        b[0x7],
+                        b[0x6],
+                        b[0x5],
+                        b[0x4],
+                        b[0xB],
+                        b[0xA],
+                        b[0x9],
+                        b[0x8],
+                        b[0xF],
+                        b[0xE],
+                        b[0xD],
+                        b[0xC],
+                    ]
+                )
+            )
+
+        def __str__(self) -> str:
+            b = self.raw_bytes
+            return "%08x-%04x-%04x-%04x-%04x%08x" % (
+                (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | (b[0]),
+                (b[7] << 8) | (b[6]),
+                (b[5] << 8) | (b[4]),
+                (b[0xB] << 8) | (b[0xA]),
+                (b[9] << 8) | (b[8]),
+                (b[0xF] << 24) | (b[0xE] << 16) | (b[0xD] << 8) | (b[0xC]),
+            )
+
+        def UUID(self) -> uuid.UUID:
             b = self.raw_bytes
             uuid_int = (
                 b[0xC]
@@ -62,11 +172,26 @@ class UUID:
                 + (b[0x2] << 112)
                 + (b[0x3] << 120)
             )
-            self.parsed_uuid = uuid.UUID(int=uuid_int)
-        return str(self.parsed_uuid)
+            return uuid.UUID(int=uuid_int)
 
-    def __eq__(self, __value: object) -> bool:
-        return str(self) == str(__value)
+        def __eq__(self, __value: object) -> bool:
+            if isinstance(__value, UUID):
+                return self.raw_bytes == __value.raw_bytes
+            return str(self) == str(__value)
+
+        def __ne__(self, __value: object) -> bool:
+            if isinstance(__value, UUID):
+                return self.raw_bytes != __value.raw_bytes
+            return str(self) != str(__value)
+
+        def __repr__(self) -> str:
+            return "%s.UUID('%s')" % (self.__module__, str(self))
+
+
+# Specify a type for JSON-serializable objects
+JSON = Union[
+    None, bool, int, float, str, list["JSON"], dict[str, "JSON"], UUID, uuid.UUID
+]
 
 
 def instance_id_reader(reader: "FArchiveReader") -> dict[str, UUID]:
@@ -96,12 +221,14 @@ class FArchiveReader:
         type_hints: dict[str, str] = {},
         custom_properties: dict[str, tuple[Callable, Callable]] = {},
         debug: bool = os.environ.get("DEBUG", "0") == "1",
+        allow_nan: bool = True,
     ):
         self.data = io.BytesIO(data)
         self.size = len(data)
         self.type_hints = type_hints
         self.custom_properties = custom_properties
         self.debug = debug
+        self.allow_nan = allow_nan
 
     def __enter__(self):
         self.data.seek(0)
@@ -109,6 +236,15 @@ class FArchiveReader:
 
     def __exit__(self, type, value, traceback):
         self.data.close()
+
+    def internal_copy(self, data, debug: bool) -> "FArchiveReader":
+        return FArchiveReader(
+            data,
+            self.type_hints,
+            self.custom_properties,
+            debug=debug,
+            allow_nan=self.allow_nan,
+        )
 
     def get_type_or(self, path: str, default: str):
         if path in self.type_hints:
@@ -132,7 +268,7 @@ class FArchiveReader:
     def fstring(self) -> str:
         # in the hot loop, avoid function calls
         reader = self.data
-        (size,) = self.unpack_i32(reader.read(4))
+        (size,) = FArchiveReader.unpack_i32(reader.read(4))
 
         if size == 0:
             return ""
@@ -153,60 +289,70 @@ class FArchiveReader:
             try:
                 escaped = data.decode(encoding, errors="surrogatepass")
                 print(
-                    f"Error decoding {encoding} string of length {size}, data loss may occur! {bytes(data)}"
+                    f"Error decoding {encoding} string of length {size}, data loss may occur! {bytes(data)!r}"
                 )
                 return escaped
             except Exception as e:
                 raise Exception(
-                    f"Error decoding {encoding} string of length {size}: {bytes(data)}"
+                    f"Error decoding {encoding} string of length {size}: {bytes(data)!r}"
                 ) from e
 
     unpack_i16 = struct.Struct("h").unpack
 
     def i16(self) -> int:
-        return self.unpack_i16(self.data.read(2))[0]
+        return FArchiveReader.unpack_i16(self.data.read(2))[0]
 
     unpack_u16 = struct.Struct("H").unpack
 
     def u16(self) -> int:
-        return self.unpack_u16(self.data.read(2))[0]
+        return FArchiveReader.unpack_u16(self.data.read(2))[0]
 
     unpack_i32 = struct.Struct("i").unpack
 
     def i32(self) -> int:
-        return self.unpack_i32(self.data.read(4))[0]
+        return FArchiveReader.unpack_i32(self.data.read(4))[0]
 
     unpack_u32 = struct.Struct("I").unpack
 
     def u32(self) -> int:
-        return self.unpack_u32(self.data.read(4))[0]
+        return FArchiveReader.unpack_u32(self.data.read(4))[0]
 
     unpack_i64 = struct.Struct("q").unpack
 
     def i64(self) -> int:
-        return self.unpack_i64(self.data.read(8))[0]
+        return FArchiveReader.unpack_i64(self.data.read(8))[0]
 
     unpack_u64 = struct.Struct("Q").unpack
 
     def u64(self) -> int:
-        return self.unpack_u64(self.data.read(8))[0]
+        return FArchiveReader.unpack_u64(self.data.read(8))[0]
 
     unpack_float = struct.Struct("f").unpack
 
-    def float(self) -> float:
-        return self.unpack_float(self.data.read(4))[0]
+    def float(self) -> Optional[_float]:
+        val = FArchiveReader.unpack_float(self.data.read(4))[0]
+        if self.allow_nan:
+            return val
+        if val == math.nan or val == math.inf or val == -math.inf:
+            return None
+        return val
 
     unpack_double = struct.Struct("d").unpack
 
-    def double(self) -> float:
-        return self.unpack_double(self.data.read(8))[0]
+    def double(self) -> Optional[_float]:
+        val = FArchiveReader.unpack_double(self.data.read(8))[0]
+        if self.allow_nan:
+            return val
+        if val == math.nan or val == math.inf or val == -math.inf:
+            return None
+        return val
 
     unpack_byte = struct.Struct("B").unpack
 
     def byte(self) -> int:
-        return self.unpack_byte(self.data.read(1))[0]
+        return FArchiveReader.unpack_byte(self.data.read(1))[0]
 
-    def byte_list(self, size: int) -> list[int]:
+    def byte_list(self, size: int) -> Sequence[int]:
         return struct.unpack(str(size) + "B", self.data.read(size))
 
     def skip(self, size: int) -> None:
@@ -222,9 +368,7 @@ class FArchiveReader:
             return UUID(self.data.read(16))
         return None
 
-    def tarray(
-        self, type_reader: Callable[["FArchiveReader"], dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def tarray(self, type_reader: Callable[["FArchiveReader"], Any]) -> list[Any]:
         count = self.u32()
         array = []
         for _ in range(count):
@@ -312,7 +456,6 @@ class FArchiveReader:
             _id = self.optional_guid()
             self.u32()
             count = self.u32()
-            values = {}
             key_path = path + ".Key"
             if key_type == "StructProperty":
                 key_struct_type = self.get_type_or(key_path, "Guid")
@@ -323,7 +466,7 @@ class FArchiveReader:
                 value_struct_type = self.get_type_or(value_path, "StructProperty")
             else:
                 value_struct_type = None
-            values = []
+            values: list[dict[str, Any]] = []
             for _ in range(count):
                 key = self.prop_value(key_type, key_struct_type, key_path)
                 value = self.prop_value(value_type, value_struct_type, value_path)
@@ -374,22 +517,13 @@ class FArchiveReader:
 
     def struct_value(self, struct_type: str, path: str = ""):
         if struct_type == "Vector":
-            return {
-                "x": self.double(),
-                "y": self.double(),
-                "z": self.double(),
-            }
+            return self.vector_dict()
         elif struct_type == "DateTime":
             return self.u64()
         elif struct_type == "Guid":
             return self.guid()
         elif struct_type == "Quat":
-            return {
-                "x": self.double(),
-                "y": self.double(),
-                "z": self.double(),
-                "w": self.double(),
-            }
+            return self.quat_dict()
         elif struct_type == "LinearColor":
             return {
                 "r": self.float(),
@@ -450,14 +584,14 @@ class FArchiveReader:
 
         return values
 
-    def compressed_short_rotator(self) -> tuple[float, float, float]:
+    def compressed_short_rotator(self) -> tuple[_float, _float, _float]:
         short_pitch = self.u16() if self.bool() else 0
         short_yaw = self.u16() if self.bool() else 0
         short_roll = self.u16() if self.bool() else 0
         pitch = short_pitch * (360.0 / 65536.0)
         yaw = short_yaw * (360.0 / 65536.0)
         roll = short_roll * (360.0 / 65536.0)
-        return [pitch, yaw, roll]
+        return (pitch, yaw, roll)
 
     def serializeint(self, component_bit_count: int) -> int:
         b = bytearray(self.read((component_bit_count + 7) // 8))
@@ -466,7 +600,9 @@ class FArchiveReader:
         value = int.from_bytes(b, "little")
         return value
 
-    def packed_vector(self, scale_factor: int) -> tuple[float, float, float]:
+    def packed_vector(
+        self, scale_factor: int
+    ) -> tuple[Optional[_float], Optional[_float], Optional[_float]]:
         component_bit_count_and_extra_info = self.u32()
         component_bit_count = component_bit_count_and_extra_info & 63
         extra_info = component_bit_count_and_extra_info >> 6
@@ -480,41 +616,43 @@ class FArchiveReader:
             z = (z & (sign_bit - 1)) - (z & sign_bit)
 
             if extra_info:
-                x /= scale_factor
-                y /= scale_factor
-                z /= scale_factor
+                return (x / scale_factor, y / scale_factor, z / scale_factor)
             return (x, y, z)
         else:
             received_scaler_type_size = 8 if extra_info else 4
             if received_scaler_type_size == 8:
-                x = self.double()
-                y = self.double()
-                z = self.double()
-                return (x, y, z)
+                return self.vector()
             else:
-                x = self.float()
-                y = self.float()
-                z = self.float()
-                return (x, y, z)
+                return (self.float(), self.float(), self.float())
 
-    def ftransform(self) -> dict[str, dict[str, float]]:
+    def vector(self) -> tuple[Optional[_float], Optional[_float], Optional[_float]]:
+        return (self.double(), self.double(), self.double())
+
+    def vector_dict(self) -> dict[str, Optional[_float]]:
         return {
-            "rotation": {
-                "x": self.double(),
-                "y": self.double(),
-                "z": self.double(),
-                "w": self.double(),
-            },
-            "translation": {
-                "x": self.double(),
-                "y": self.double(),
-                "z": self.double(),
-            },
-            "scale3d": {
-                "x": self.double(),
-                "y": self.double(),
-                "z": self.double(),
-            },
+            "x": self.double(),
+            "y": self.double(),
+            "z": self.double(),
+        }
+
+    def quat(
+        self,
+    ) -> tuple[Optional[_float], Optional[_float], Optional[_float], Optional[_float]]:
+        return (self.double(), self.double(), self.double(), self.double())
+
+    def quat_dict(self) -> dict[str, Optional[_float]]:
+        return {
+            "x": self.double(),
+            "y": self.double(),
+            "z": self.double(),
+            "w": self.double(),
+        }
+
+    def ftransform(self) -> dict[str, dict[str, Optional[_float]]]:
+        return {
+            "rotation": self.quat_dict(),
+            "translation": self.vector_dict(),
+            "scale3d": self.vector_dict(),
         }
 
 
@@ -585,7 +723,7 @@ class FArchiveWriter:
         self.data.seek(pos)
         return b
 
-    def write(self, data: bytes):
+    def write(self, data: _bytes):
         self.data.write(data)
 
     def bool(self, bool: bool):
@@ -626,10 +764,14 @@ class FArchiveWriter:
     def u64(self, i: int):
         self.data.write(struct.pack("Q", i))
 
-    def float(self, i: float):
+    def float(self, i: Optional[float]):
+        if i is None:
+            i = float("nan")
         self.data.write(struct.pack("f", i))
 
-    def double(self, i: float):
+    def double(self, i: Optional[_float]):
+        if i is None:
+            i = float("nan")
         self.data.write(struct.pack("d", i))
 
     def byte(self, b: int):
@@ -649,7 +791,7 @@ class FArchiveWriter:
             uuid_writer(self, u)
 
     def tarray(
-        self, type_writer: Callable[["FArchiveWriter", dict[str, Any]], None], array
+        self, type_writer: Callable[["FArchiveWriter", Any], None], array: list[Any]
     ):
         self.u32(len(array))
         for i in range(len(array)):
@@ -756,18 +898,13 @@ class FArchiveWriter:
 
     def struct_value(self, struct_type: str, value):
         if struct_type == "Vector":
-            self.double(value["x"])
-            self.double(value["y"])
-            self.double(value["z"])
+            self.vector_dict(value)
         elif struct_type == "DateTime":
             self.u64(value)
         elif struct_type == "Guid":
             self.guid(value)
         elif struct_type == "Quat":
-            self.double(value["x"])
-            self.double(value["y"])
-            self.double(value["z"])
-            self.double(value["w"])
+            self.quat_dict(value)
         elif struct_type == "LinearColor":
             self.float(value["r"])
             self.float(value["g"])
@@ -831,7 +968,7 @@ class FArchiveWriter:
             else:
                 raise Exception(f"Unknown array type: {array_type}")
 
-    def compressed_short_rotator(self, pitch: float, yaw: float, roll: float):
+    def compressed_short_rotator(self, pitch: _float, yaw: _float, roll: _float):
         short_pitch = round(pitch * (65536.0 / 360.0)) & 0xFFFF
         short_yaw = round(yaw * (65536.0 / 360.0)) & 0xFFFF
         short_roll = round(roll * (65536.0 / 360.0)) & 0xFFFF
@@ -852,7 +989,7 @@ class FArchiveWriter:
             self.bool(False)
 
     @staticmethod
-    def unreal_round_float_to_int(value: float) -> int:
+    def unreal_round_float_to_int(value: _float) -> int:
         return int(value)
 
     @staticmethod
@@ -869,7 +1006,7 @@ class FArchiveWriter:
             int.to_bytes(value, (component_bit_count + 7) // 8, "little", signed=True)
         )
 
-    def packed_vector(self, scale_factor: int, x: float, y: float, z: float):
+    def packed_vector(self, scale_factor: int, x: _float, y: _float, z: _float):
         max_exponent_for_scaling = 52
         max_value_to_scale = 1 << max_exponent_for_scaling
         max_exponent_after_scaling = 62
@@ -908,14 +1045,35 @@ class FArchiveWriter:
             self.double(y)
             self.double(z)
 
-    def ftransform(self, value: dict[str, dict[str, float]]):
-        self.double(value["rotation"]["x"])
-        self.double(value["rotation"]["y"])
-        self.double(value["rotation"]["z"])
-        self.double(value["rotation"]["w"])
-        self.double(value["translation"]["x"])
-        self.double(value["translation"]["y"])
-        self.double(value["translation"]["z"])
-        self.double(value["scale3d"]["x"])
-        self.double(value["scale3d"]["y"])
-        self.double(value["scale3d"]["z"])
+    def vector(self, x: Optional[_float], y: Optional[_float], z: Optional[_float]):
+        self.double(x)
+        self.double(y)
+        self.double(z)
+
+    def vector_dict(self, value: dict[str, Optional[_float]]):
+        self.double(value["x"])
+        self.double(value["y"])
+        self.double(value["z"])
+
+    def quat(
+        self,
+        x: Optional[_float],
+        y: Optional[_float],
+        z: Optional[_float],
+        w: Optional[_float],
+    ):
+        self.double(x)
+        self.double(y)
+        self.double(z)
+        self.double(w)
+
+    def quat_dict(self, value: dict[str, Optional[_float]]):
+        self.double(value["x"])
+        self.double(value["y"])
+        self.double(value["z"])
+        self.double(value["w"])
+
+    def ftransform(self, value: dict[str, dict[str, Optional[_float]]]):
+        self.quat_dict(value["rotation"])
+        self.vector_dict(value["translation"])
+        self.vector_dict(value["scale3d"])

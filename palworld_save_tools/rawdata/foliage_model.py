@@ -1,6 +1,6 @@
 from typing import Any, Sequence
 
-from lib.archive import *
+from palworld_save_tools.archive import *
 
 
 def decode(
@@ -10,21 +10,22 @@ def decode(
         raise Exception(f"Expected ArrayProperty, got {type_name}")
     value = reader.property(type_name, size, path, nested_caller_path=path)
     data_bytes = value["value"]["values"]
-    value["value"] = decode_bytes(data_bytes)
+    value["value"] = decode_bytes(reader, data_bytes)
     return value
 
 
-def decode_bytes(b_bytes: Sequence[int]) -> dict[str, Any]:
-    reader = FArchiveReader(bytes(b_bytes), debug=False)
-    data = {}
-    data["id"] = reader.guid()
-    data["name"] = reader.fstring()
-    data["state"] = reader.byte()
-    data["transform"] = reader.ftransform()
-    data["area_range"] = reader.float()
-    data["group_id_belong_to"] = reader.guid()
-    data["fast_travel_local_transform"] = reader.ftransform()
-    data["owner_map_object_instance_id"] = reader.guid()
+def decode_bytes(
+    parent_reader: FArchiveReader, b_bytes: Sequence[int]
+) -> dict[str, Any]:
+    reader = parent_reader.internal_copy(bytes(b_bytes), debug=False)
+    data: dict[str, Any] = {}
+    data["model_id"] = reader.fstring()
+    data["foliage_preset_type"] = reader.byte()
+    data["cell_coord"] = {
+        "x": reader.i64(),
+        "y": reader.i64(),
+        "z": reader.i64(),
+    }
     if not reader.eof():
         raise Exception("Warning: EOF not reached")
     return data
@@ -43,13 +44,12 @@ def encode(
 
 def encode_bytes(p: dict[str, Any]) -> bytes:
     writer = FArchiveWriter()
-    writer.guid(p["id"])
-    writer.fstring(p["name"])
-    writer.byte(p["state"])
-    writer.ftransform(p["transform"])
-    writer.float(p["area_range"])
-    writer.guid(p["group_id_belong_to"])
-    writer.ftransform(p["fast_travel_local_transform"])
-    writer.guid(p["owner_map_object_instance_id"])
+
+    writer.fstring(p["model_id"])
+    writer.byte(p["foliage_preset_type"])
+    writer.i64(p["cell_coord"]["x"])
+    writer.i64(p["cell_coord"]["y"])
+    writer.i64(p["cell_coord"]["z"])
+
     encoded_bytes = writer.bytes()
     return encoded_bytes

@@ -1,6 +1,6 @@
 from typing import Any, Sequence
 
-from lib.archive import *
+from palworld_save_tools.archive import *
 
 
 def decode(
@@ -10,13 +10,15 @@ def decode(
         raise Exception(f"Expected ArrayProperty, got {type_name}")
     value = reader.property(type_name, size, path, nested_caller_path=path)
     data_bytes = value["value"]["values"]
-    value["value"] = decode_bytes(data_bytes)
+    value["value"] = decode_bytes(reader, data_bytes)
     return value
 
 
-def decode_bytes(b_bytes: Sequence[int]) -> dict[str, Any]:
-    reader = FArchiveReader(bytes(b_bytes), debug=False)
-    data = {}
+def decode_bytes(
+    parent_reader: FArchiveReader, b_bytes: Sequence[int]
+) -> dict[str, Any]:
+    reader = parent_reader.internal_copy(bytes(b_bytes), debug=False)
+    data: dict[str, Any] = {}
     data["model_instance_id"] = reader.guid()
     pitch, yaw, roll = reader.compressed_short_rotator()
     x, y, z = reader.packed_vector(1)

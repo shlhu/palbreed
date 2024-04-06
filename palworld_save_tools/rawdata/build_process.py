@@ -1,6 +1,6 @@
 from typing import Any, Sequence
 
-from lib.archive import *
+from palworld_save_tools.archive import *
 
 
 def decode(
@@ -10,19 +10,17 @@ def decode(
         raise Exception(f"Expected ArrayProperty, got {type_name}")
     value = reader.property(type_name, size, path, nested_caller_path=path)
     data_bytes = value["value"]["values"]
-    value["value"] = decode_bytes(data_bytes)
+    value["value"] = decode_bytes(reader, data_bytes)
     return value
 
 
-def decode_bytes(c_bytes: Sequence[int]) -> dict[str, Any]:
-    if len(c_bytes) == 0:
-        return None
-    reader = FArchiveReader(bytes(c_bytes), debug=False)
-    data = {}
-    data["permission"] = {
-        "type_a": reader.tarray(lambda r: r.byte()),
-        "type_b": reader.tarray(lambda r: r.byte()),
-        "item_static_ids": reader.tarray(lambda r: r.fstring()),
+def decode_bytes(
+    parent_reader: FArchiveReader, b_bytes: Sequence[int]
+) -> dict[str, Any]:
+    reader = parent_reader.internal_copy(bytes(b_bytes), debug=False)
+    data = {
+        "state": reader.byte(),
+        "id": reader.guid(),
     }
     if not reader.eof():
         raise Exception("Warning: EOF not reached")
@@ -41,11 +39,8 @@ def encode(
 
 
 def encode_bytes(p: dict[str, Any]) -> bytes:
-    if p is None:
-        return bytes()
     writer = FArchiveWriter()
-    writer.tarray(lambda w, d: w.byte(d), p["permission"]["type_a"])
-    writer.tarray(lambda w, d: w.byte(d), p["permission"]["type_b"])
-    writer.tarray(lambda w, d: w.fstring(d), p["permission"]["item_static_ids"])
+    writer.byte(p["state"])
+    writer.guid(p["id"])
     encoded_bytes = writer.bytes()
     return encoded_bytes

@@ -1,7 +1,7 @@
 import base64
 from typing import Any, Callable
 
-from lib.archive import FArchiveReader, FArchiveWriter
+from palworld_save_tools.archive import FArchiveReader, FArchiveWriter
 
 
 def custom_version_reader(reader: FArchiveReader):
@@ -118,9 +118,15 @@ class GvasFile:
         data: bytes,
         type_hints: dict[str, str] = {},
         custom_properties: dict[str, tuple[Callable, Callable]] = {},
+        allow_nan: bool = True,
     ) -> "GvasFile":
         gvas_file = GvasFile()
-        with FArchiveReader(data, type_hints, custom_properties) as reader:
+        with FArchiveReader(
+            data,
+            type_hints=type_hints,
+            custom_properties=custom_properties,
+            allow_nan=allow_nan,
+        ) as reader:
             gvas_file.header = GvasHeader.read(reader)
             gvas_file.properties = reader.properties_until_end()
             gvas_file.trailer = reader.read_to_end()

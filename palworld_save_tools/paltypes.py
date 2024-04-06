@@ -1,21 +1,18 @@
 from typing import Any, Callable
 
-from lib.archive import FArchiveReader, FArchiveWriter
-from lib.rawdata import (
+from palworld_save_tools.archive import FArchiveReader, FArchiveWriter
+from palworld_save_tools.rawdata import (
     base_camp,
     base_camp_module,
-    build_process,
     character,
     character_container,
-    connector,
-    debug,
     dynamic_item,
     foliage_model,
     foliage_model_instance,
     group,
     item_container,
     item_container_slots,
-    map_model,
+    map_object,
     work,
     work_collection,
     worker_director,
@@ -49,6 +46,8 @@ PALWORLD_TYPE_HINTS: dict[str, str] = {
     ".worldSaveData.EnemyCampSaveData.EnemyCampStatusMap.Value": "StructProperty",
     ".worldSaveData.DungeonSaveData.DungeonSaveData.MapObjectSaveData.MapObjectSaveData.Model.EffectMap.Value": "StructProperty",
     ".worldSaveData.DungeonSaveData.DungeonSaveData.MapObjectSaveData.MapObjectSaveData.ConcreteModel.ModuleMap.Value": "StructProperty",
+    ".worldSaveData.InvaderSaveData.Key": "Guid",
+    ".worldSaveData.InvaderSaveData.Value": "StructProperty",
 }
 
 PALWORLD_CUSTOM_PROPERTIES: dict[
@@ -62,18 +61,6 @@ PALWORLD_CUSTOM_PROPERTIES: dict[
     ".worldSaveData.CharacterSaveParameterMap.Value.RawData": (
         character.decode,
         character.encode,
-    ),
-    ".worldSaveData.MapObjectSaveData.MapObjectSaveData.Model.BuildProcess.RawData": (
-        build_process.decode,
-        build_process.encode,
-    ),
-    ".worldSaveData.MapObjectSaveData.MapObjectSaveData.Model.Connector.RawData": (
-        connector.decode,
-        connector.encode,
-    ),
-    ".worldSaveData.MapObjectSaveData.MapObjectSaveData.Model.RawData": (
-        map_model.decode,
-        map_model.encode,
     ),
     ".worldSaveData.ItemContainerSaveData.Value.RawData": (
         item_container.decode,
@@ -90,7 +77,6 @@ PALWORLD_CUSTOM_PROPERTIES: dict[
         character_container.decode,
         character_container.encode,
     ),
-    # DynamicItemSaveData is problematic because serialisation is dependent on type, which is not immediately obvious
     ".worldSaveData.DynamicItemSaveData.DynamicItemSaveData.RawData": (
         dynamic_item.decode,
         dynamic_item.encode,
@@ -115,15 +101,13 @@ PALWORLD_CUSTOM_PROPERTIES: dict[
         work_collection.decode,
         work_collection.encode,
     ),
-    # ".worldSaveData.BaseCampSaveData.Value.ModuleMap": (base_camp_module.decode, base_camp_module.encode),
+    ".worldSaveData.BaseCampSaveData.Value.ModuleMap": (
+        base_camp_module.decode,
+        base_camp_module.encode,
+    ),
     ".worldSaveData.WorkSaveData": (work.decode, work.encode),
-    # ".worldSaveData.WorkSaveData.WorkSaveData.RawData": (debug.decode, debug.encode),
-    # ".worldSaveData.WorkSaveData.WorkSaveData.WorkAssignMap.Value.RawData": (debug.decode, debug.encode),
-    # ConcreteModel is problematic because serialisation is dependent on type, which is not immediately obvious
-    # ".worldSaveData.MapObjectSaveData.MapObjectSaveData.ConcreteModel": (
-    #     decode_map_concrete_model,
-    #     encode_map_concrete_model,
-    # ),
-    # ".worldSaveData.MapObjectSaveData.MapObjectSaveData.ConcreteModel.RawData": (),
-    # ".worldSaveData.MapObjectSaveData.MapObjectSaveData.ConcreteModel.ModuleMap.Value.RawData": (),
+    ".worldSaveData.MapObjectSaveData": (
+        map_object.decode,
+        map_object.encode,
+    ),
 }

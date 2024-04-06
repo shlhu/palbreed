@@ -1,6 +1,6 @@
 from typing import Any, Sequence
 
-from lib.archive import *
+from palworld_save_tools.archive import *
 
 
 def decode(
@@ -10,15 +10,21 @@ def decode(
         raise Exception(f"Expected ArrayProperty, got {type_name}")
     value = reader.property(type_name, size, path, nested_caller_path=path)
     data_bytes = value["value"]["values"]
-    value["value"] = decode_bytes(data_bytes)
+    value["value"] = decode_bytes(reader, data_bytes)
     return value
 
 
-def decode_bytes(b_bytes: Sequence[int]) -> dict[str, Any]:
-    reader = FArchiveReader(bytes(b_bytes), debug=False)
-    data = {}
-    data["state"] = reader.byte()
-    data["id"] = reader.guid()
+def decode_bytes(
+    parent_reader: FArchiveReader, c_bytes: Sequence[int]
+) -> Optional[dict[str, Any]]:
+    if len(c_bytes) == 0:
+        return None
+    reader = parent_reader.internal_copy(bytes(c_bytes), debug=False)
+    data = {
+        "player_uid": reader.guid(),
+        "instance_id": reader.guid(),
+        "permission_tribe_id": reader.byte(),
+    }
     if not reader.eof():
         raise Exception("Warning: EOF not reached")
     return data
@@ -36,8 +42,11 @@ def encode(
 
 
 def encode_bytes(p: dict[str, Any]) -> bytes:
+    if p is None:
+        return bytes()
     writer = FArchiveWriter()
-    writer.byte(p["state"])
-    writer.guid(p["id"])
+    writer.guid(p["player_uid"])
+    writer.guid(p["instance_id"])
+    writer.byte(p["permission_tribe_id"])
     encoded_bytes = writer.bytes()
     return encoded_bytes
